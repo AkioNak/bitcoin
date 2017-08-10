@@ -1490,10 +1490,6 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
     const CBlockIndex* pindex;
     int blockcount = 30 * 24 * 60 * 60 / Params().GetConsensus().nPowTargetSpacing; // By default: 1 month
 
-    if (request.params.size() > 0 && !request.params[0].isNull()) {
-        blockcount = request.params[0].get_int();
-    }
-
     bool havehash = request.params.size() > 1 && !request.params[1].isNull();
     uint256 hash;
     if (havehash) {
@@ -1516,8 +1512,14 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
         }
     }
 
+    blockcount = std::min(blockcount, pindex->nHeight - 1);
+
+    if (!request.params[0].isNull()) {
+        blockcount = request.params[0].get_int();
+    }
+
     if (blockcount < 1 || blockcount >= pindex->nHeight) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid block count: should be between 1 and the block's height");
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid block count: should be between 1 and the block's height - 1");
     }
 
     const CBlockIndex* pindexPast = pindex->GetAncestor(pindex->nHeight - blockcount);
@@ -1527,7 +1529,7 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
     UniValue ret(UniValue::VOBJ);
     ret.push_back(Pair("time", (int64_t)pindex->nTime));
     ret.push_back(Pair("txcount", (int64_t)pindex->nChainTx));
-    ret.push_back(Pair("txrate", ((double)nTxDiff) / nTimeDiff));
+    ret.push_back(Pair("txrate", (nTimeDiff > 0) ?  (((double)nTxDiff) / nTimeDiff) : UniValue(UniValue::VNULL)));
 
     return ret;
 }
