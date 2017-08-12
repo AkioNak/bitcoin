@@ -1512,6 +1512,9 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
         }
     }
 
+    if (pindex->nHeight < 2) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Block's height should be 2 or more.");
+    }
     blockcount = std::min(blockcount, pindex->nHeight - 1);
 
     if (!request.params[0].isNull()) {
