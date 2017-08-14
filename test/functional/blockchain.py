@@ -56,6 +56,22 @@ class BlockchainTest(BitcoinTestFramework):
         # we have to round because of binary math
         assert_equal(round(chaintxstats['txrate'] * 600, 10), Decimal(1))
 
+        b1 = self.nodes[0].getblock(self.nodes[0].getblockhash(1))
+        b200 = self.nodes[0].getblock(self.nodes[0].getblockhash(200))
+        ntimediff = b200['mediantime'] - b1['mediantime']
+
+        chaintxstats = self.nodes[0].getchaintxstats()
+        assert_equal(chaintxstats['time'], b200['time'])
+        assert_equal(chaintxstats['txcount'], 201)
+        assert_equal(round(chaintxstats['txrate'] * ntimediff, 10), Decimal(199))
+
+        chaintxstats = self.nodes[0].getchaintxstats(blockhash=b1['hash'])
+        assert_equal(chaintxstats['time'], b1['time'])
+        assert_equal(chaintxstats['txcount'], 2)
+        assert_equal(chaintxstats['txrate'], None)
+
+        assert_raises_jsonrpc(-8, "Invalid block count: should be between 1 and the block's height - 1", self.nodes[0].getchaintxstats, 201)
+
     def _test_gettxoutsetinfo(self):
         node = self.nodes[0]
         res = node.gettxoutsetinfo()
