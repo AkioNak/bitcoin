@@ -1513,16 +1513,17 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
     }
 
     if (pindex->nHeight < 2) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Block's height should be 2 or more.");
+        blockcount = 0;
+    } else {
+        blockcount = std::min(blockcount, pindex->nHeight - 1);
     }
-    blockcount = std::min(blockcount, pindex->nHeight - 1);
 
     if (!request.params[0].isNull()) {
         blockcount = request.params[0].get_int();
-    }
 
-    if (blockcount < 1 || blockcount >= pindex->nHeight) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid block count: should be between 1 and the block's height - 1");
+        if (blockcount < 1 || blockcount >= pindex->nHeight) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid block count: should be between 1 and the block's height - 1");
+        }
     }
 
     const CBlockIndex* pindexPast = pindex->GetAncestor(pindex->nHeight - blockcount);
