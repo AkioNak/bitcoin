@@ -1480,6 +1480,7 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
             "{\n"
             "  \"time\": xxxxx,        (numeric) The timestamp for the statistics in UNIX format.\n"
             "  \"txcount\": xxxxx,     (numeric) The total number of transactions in the chain up to that point.\n"
+            "  \"block_count\": xxxxx, (numeric) The block height that ends the window.\n"
             "  \"txrate\": x.xx,       (numeric) The average rate of transactions per second in the window.\n"
             "}\n"
             "\nExamples:\n"
@@ -1533,7 +1534,10 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
     UniValue ret(UniValue::VOBJ);
     ret.push_back(Pair("time", (int64_t)pindex->nTime));
     ret.push_back(Pair("txcount", (int64_t)pindex->nChainTx));
-    ret.push_back(Pair("txrate", (nTimeDiff > 0) ?  (((double)nTxDiff) / nTimeDiff) : UniValue(UniValue::VNULL)));
+    ret.push_back(Pair("block_count", (int64_t)pindex->nHeight));
+    if (nTimeDiff > 0) {
+        ret.push_back(Pair("txrate", ((double)nTxDiff) / nTimeDiff));
+    }
 
     return ret;
 }
