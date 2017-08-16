@@ -58,17 +58,19 @@ class BlockchainTest(BitcoinTestFramework):
 
         b1 = self.nodes[0].getblock(self.nodes[0].getblockhash(1))
         b200 = self.nodes[0].getblock(self.nodes[0].getblockhash(200))
-        ntimediff = b200['mediantime'] - b1['mediantime']
+        time_diff = b200['mediantime'] - b1['mediantime']
 
         chaintxstats = self.nodes[0].getchaintxstats()
         assert_equal(chaintxstats['time'], b200['time'])
         assert_equal(chaintxstats['txcount'], 201)
-        assert_equal(round(chaintxstats['txrate'] * ntimediff, 10), Decimal(199))
+        assert_equal(chaintxstats['block_count'], 200)
+        assert_equal(round(chaintxstats['txrate'] * time_diff, 10), Decimal(199))
 
         chaintxstats = self.nodes[0].getchaintxstats(blockhash=b1['hash'])
         assert_equal(chaintxstats['time'], b1['time'])
         assert_equal(chaintxstats['txcount'], 2)
-        assert_equal(chaintxstats['txrate'], None)
+        assert_equal(chaintxstats['block_count'], 1)
+        assert('txrate' not in chaintxstats)
 
         assert_raises_jsonrpc(-8, "Invalid block count: should be between 1 and the block's height - 1", self.nodes[0].getchaintxstats, 201)
 
