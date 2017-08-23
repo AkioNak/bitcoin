@@ -1479,6 +1479,9 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
             "{\n"
             "  \"time\": xxxxx,        (numeric) The timestamp for the statistics in UNIX format.\n"
             "  \"txcount\": xxxxx,     (numeric) The total number of transactions in the chain up to that point.\n"
+            "  \"block_count\": xxxxx, (numeric) Size of the window in number of blocks.\n"
+            "  \"txratecount\": xxxxx, (numeric) The number of transactions in the window.\n"
+            "  \"txrateinterval\": xxxxx, (numeric) The elapsed time in the window.\n"
             "  \"txrate\": x.xx,       (numeric) The average rate of transactions per second in the window.\n"
             "}\n"
             "\nExamples:\n"
@@ -1488,10 +1491,6 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
 
     const CBlockIndex* pindex;
     int blockcount = 30 * 24 * 60 * 60 / Params().GetConsensus().nPowTargetSpacing; // By default: 1 month
-
-    if (!request.params[0].isNull()) {
-        blockcount = request.params[0].get_int();
-    }
 
     bool havehash = !request.params[1].isNull();
     uint256 hash;
@@ -1515,8 +1514,18 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
         }
     }
 
-    if (blockcount < 1 || blockcount >= pindex->nHeight) {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid block count: should be between 1 and the block's height");
+    if (pindex->nHeight < 2) {
+        blockcount = 0;
+    } else {
+        blockcount = std::min(blockcount, pindex->nHeight - 1);
+    }
+
+    if (!request.params[0].isNull()) {
+        blockcount = request.params[0].get_int();
+
+        if (blockcount < 1 || blockcount >= pindex->nHeight) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid block count: should be between 1 and the block's height - 1");
+        }
     }
 
     const CBlockIndex* pindexPast = pindex->GetAncestor(pindex->nHeight - blockcount);
@@ -1526,7 +1535,14 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
     UniValue ret(UniValue::VOBJ);
     ret.push_back(Pair("time", (int64_t)pindex->nTime));
     ret.push_back(Pair("txcount", (int64_t)pindex->nChainTx));
-    ret.push_back(Pair("txrate", ((double)nTxDiff) / nTimeDiff));
+    if (blockcount > 0) {
+        ret.push_back(Pair("block_count", blockcount));
+        ret.push_back(Pair("txratecount", nTxDiff));
+        ret.push_back(Pair("txrateinterval", nTimeDiff));
+    }
+    if (nTimeDiff > 0) {
+        ret.push_back(Pair("txrate", ((double)nTxDiff) / nTimeDiff));
+    }
 
     return ret;
 }
