@@ -530,7 +530,7 @@ uint32_t getCategoryMask(UniValue cats) {
     for (unsigned int i = 0; i < cats.size(); ++i) {
         uint32_t flag = 0;
         std::string cat = cats[i].get_str();
-        if (!GetLogCategory(&flag, &cat)) {
+        if (!GetLogCategory(&flag, &cat) || (cat == "0" || cat == "1")) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "unknown logging category " + cat);
         }
         mask |= flag;
@@ -542,16 +542,28 @@ UniValue logging(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() > 2) {
         throw std::runtime_error(
-            "logging [include,...] <exclude>\n"
+            "logging (<include> <exclude>)\n"
             "Gets and sets the logging configuration.\n"
-            "When called without an argument, returns the list of categories that are currently being debug logged.\n"
-            "When called with arguments, adds or removes categories from debug logging.\n"
+            "When called without an argument, returns the list of categories with status that are currently being debug logged or not.\n"
+            "When called with arguments, adds or removes categories from debug logging and return the list above.\n"
+			"The argument are evaluated for \"include\" first. That is, \"exclude\" takes precedence.\n"
             "The valid logging categories are: " + ListLogCategories() + "\n"
-            "libevent logging is configured on startup and cannot be modified by this RPC during runtime."
-            "Arguments:\n"
-            "1. \"include\" (array of strings) add debug logging for these categories.\n"
-            "2. \"exclude\" (array of strings) remove debug logging for these categories.\n"
-            "\nResult: <categories>  (string): a list of the logging categories that are active.\n"
+            "\nArguments:\n"
+            "1. \"include\"        (array of strings, optional) A json array of categories to add debug logging\n"
+            "     [\n"
+            "       \"category\"   (string) the valid logging category or \"all\"\n"
+            "       ,...\n"
+            "     ]\n"
+            "2. \"exclude\"        (array of strings, optional) A json array of categories to remove debug logging\n"
+            "     [\n"
+            "       \"category\"   (string) the valid logging category or \"all\"\n"
+            "       ,...\n"
+            "     ]\n"
+            "\nResult:\n"
+            "{                   (json object where keys are the logging categories, and values indicates its status\n"
+            "  \"category\": 0|1,  (numeric) if being debug logged or not. 0:inactive, 1:active\n"
+            "  ...\n"
+            "}\n"
             "\nExamples:\n"
             + HelpExampleCli("logging", "\"[\\\"all\\\"]\" \"[\\\"http\\\"]\"")
             + HelpExampleRpc("logging", "[\"all\"], \"[libevent]\"")
