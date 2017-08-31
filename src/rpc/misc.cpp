@@ -530,9 +530,11 @@ uint32_t getCategoryMask(UniValue cats) {
     for (unsigned int i = 0; i < cats.size(); ++i) {
         uint32_t flag = 0;
         std::string cat = cats[i].get_str();
-        if (!GetLogCategory(&flag, &cat) || (cat == "0" || cat == "1")) {
+        if (!GetLogCategory(&flag, &cat)) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "unknown logging category " + cat);
         }
+        if (flag == BCLog::NONE)
+            return 0;
         mask |= flag;
     }
     return mask;
@@ -548,15 +550,18 @@ UniValue logging(const JSONRPCRequest& request)
             "When called with arguments, adds or removes categories from debug logging and return the list above.\n"
 			"The argument are evaluated for \"include\" first. That is, \"exclude\" takes precedence.\n"
             "The valid logging categories are: " + ListLogCategories() + "\n"
+            "In addition, the following are available as a category name with special meanings:\n"
+            "  - \"all\",  \"1\" : represent all logging categories.\n"
+            "  - \"none\", \"0\" : even if other logging categories are specified, ignore all of them.\n"
             "\nArguments:\n"
             "1. \"include\"        (array of strings, optional) A json array of categories to add debug logging\n"
             "     [\n"
-            "       \"category\"   (string) the valid logging category or \"all\"\n"
+            "       \"category\"   (string) the valid logging category\n"
             "       ,...\n"
             "     ]\n"
             "2. \"exclude\"        (array of strings, optional) A json array of categories to remove debug logging\n"
             "     [\n"
-            "       \"category\"   (string) the valid logging category or \"all\"\n"
+            "       \"category\"   (string) the valid logging category\n"
             "       ,...\n"
             "     ]\n"
             "\nResult:\n"
