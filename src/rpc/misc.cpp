@@ -533,8 +533,9 @@ uint32_t getCategoryMask(UniValue cats) {
         if (!GetLogCategory(&flag, &cat)) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "unknown logging category " + cat);
         }
-        if (flag == BCLog::NONE)
+        if (flag == BCLog::NONE) {
             return 0;
+        }
         mask |= flag;
     }
     return mask;
@@ -544,13 +545,14 @@ UniValue logging(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() > 2) {
         throw std::runtime_error(
-            "logging (<include> <exclude>)\n"
+            "logging ( <include> <exclude> )\n"
             "Gets and sets the logging configuration.\n"
             "When called without an argument, returns the list of categories with status that are currently being debug logged or not.\n"
-            "When called with arguments, adds or removes categories from debug logging and return the list above.\n"
-			"The argument are evaluated for \"include\" first. That is, \"exclude\" takes precedence.\n"
+            "When called with arguments, adds or removes categories from debug logging and return the lists above.\n"
+            "The arguments are evaluated in order \"include\", \"exclude\".\n"
+            "If an item is both included and excluded, it will thus end up being excluded.\n"
             "The valid logging categories are: " + ListLogCategories() + "\n"
-            "In addition, the following are available as a category name with special meanings:\n"
+            "In addition, the following are available as category names with special meanings:\n"
             "  - \"all\",  \"1\" : represent all logging categories.\n"
             "  - \"none\", \"0\" : even if other logging categories are specified, ignore all of them.\n"
             "\nArguments:\n"
