@@ -920,7 +920,7 @@ bool AppInitParameterInteraction()
         const std::vector<std::string> categories = gArgs.GetArgs("-debug");
 
         if (std::none_of(categories.begin(), categories.end(),
-			[](std::string cat){return cat == std::string("0") || cat == std::string("none");})) {
+            [](std::string cat){return cat == std::string("0") || cat == std::string("none");})) {
             for (const auto& cat : categories) {
                 uint32_t flag = 0;
                 if (!GetLogCategory(&flag, &cat)) {
