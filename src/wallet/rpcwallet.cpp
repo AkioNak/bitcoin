@@ -38,6 +38,9 @@
 #include <univalue.h>
 
 static const std::string WALLET_ENDPOINT_BASE = "/wallet/";
+#ifdef MAC_OSX
+static const int64_t MAX_SLEEP_INTERVAL = 100;
+#endif
 
 CWallet *GetWalletForJSONRPCRequest(const JSONRPCRequest& request)
 {
@@ -2301,6 +2304,13 @@ UniValue keypoolrefill(const JSONRPCRequest& request)
 static void LockWallet(CWallet* pWallet)
 {
     LOCK(pWallet->cs_wallet);
+#ifdef MAC_OSX
+    int64_t nSleepTime = std::min(pWallet->nRelockTime - GetTime() , MAX_SLEEP_INTERVAL);
+    if (nSleepTime > 0) {
+        RPCRunLater(strprintf("lockwallet(%s)", pWallet->GetName()), boost::bind(LockWallet, pWallet), nSleepTime);
+	    return;
+    }
+#endif
     pWallet->nRelockTime = 0;
     pWallet->Lock();
 }
@@ -2374,6 +2384,9 @@ UniValue walletpassphrase(const JSONRPCRequest& request)
     pwallet->TopUpKeyPool();
 
     pwallet->nRelockTime = GetTime() + nSleepTime;
+#ifdef MAC_OSX
+    nSleepTime = std::min(nSleepTime, MAX_SLEEP_INTERVAL);
+#endif
     RPCRunLater(strprintf("lockwallet(%s)", pwallet->GetName()), boost::bind(LockWallet, pwallet), nSleepTime);
 
     return NullUniValue;
