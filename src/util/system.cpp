@@ -841,9 +841,10 @@ static std::string TrimString(const std::string& str, const std::string& pattern
     return str.substr(front, end - front + 1);
 }
 
-static bool GetConfigOptions(std::istream& stream, std::string& error, std::vector<std::pair<std::string, std::string>>& options, std::set<std::string>& sections)
+static bool GetConfigOptions(std::istream& stream, std::string& section, std::string& error, std::vector<std::pair<std::string, std::string>>& options, std::set<std::string>& sections, int depth)
 {
-    std::string str, prefix;
+    static const int MAX_INCLUDECONF_DEPTH = 1;
+    std::string str;
     std::string::size_type pos;
     int linenr = 1;
     while (std::getline(stream, str)) {
@@ -856,22 +857,50 @@ static bool GetConfigOptions(std::istream& stream, std::string& error, std::vect
         str = TrimString(str, pattern);
         if (!str.empty()) {
             if (*str.begin() == '[' && *str.rbegin() == ']') {
-                const std::string section = str.substr(1, str.size() - 2);
+                section = str.substr(1, str.size() - 2);
                 sections.insert(section);
-                prefix = section + '.';
             } else if (*str.begin() == '-') {
                 error = strprintf("parse error on line %i: %s, options in configuration file must be specified without leading -", linenr, str);
                 return false;
             } else if ((pos = str.find('=')) != std::string::npos) {
-                std::string name = prefix + TrimString(str.substr(0, pos), pattern);
+                std::string name;
+                std::string key = TrimString(str.substr(0, pos), pattern);
+                std::string::size_type separator_pos;
+                bool simple_arg = true;
+                if ((separator_pos = key.rfind('.')) == std::string::npos) {
+                    name = section;
+                } else {
+                    simple_arg = false;
+                    name = key.substr(0, separator_pos);
+                    sections.insert(name);
+                    key = key.substr(separator_pos + 1);
+                }
                 std::string value = TrimString(str.substr(pos + 1), pattern);
-                if (used_hash && name == "rpcpassword") {
+                if (used_hash && simple_arg && key == "rpcpassword") {
                     error = strprintf("parse error on line %i, using # in rpcpassword can be ambiguous and should be avoided", linenr);
                     return false;
                 }
-                options.emplace_back(name, value);
-                if ((pos = name.rfind('.')) != std::string::npos) {
-                    sections.insert(name.substr(0, pos));
+                options.emplace_back(name.empty() ? key : name + '.' + key, value);
+                if (key == "includeconf") {
+                    if (depth < 0) {
+                        continue;
+                    } else if (depth < MAX_INCLUDECONF_DEPTH) {
+                        fsbridge::ifstream include_config(GetConfigFile(value));
+                        if (include_config.good()) {
+                            if (!GetConfigOptions(include_config, name, error, options, sections, depth + 1)) {
+                                return false;
+                            }
+                            if (simple_arg && !name.empty()) {
+                                section = name;
+                            }
+                            LogPrintf("Included configuration file %s\n", value.c_str());
+                        } else {
+                            error = "Failed to include configuration file " + value;
+                            return false;
+                        }
+                    } else {
+                        fprintf(stderr, "warning: -includeconf cannot be used from included files; ignoring -includeconf=%s\n", value.c_str());
+                    }
                 }
             } else {
                 error = strprintf("parse error on line %i: %s", linenr, str);
@@ -886,12 +915,13 @@ static bool GetConfigOptions(std::istream& stream, std::string& error, std::vect
     return true;
 }
 
-bool ArgsManager::ReadConfigStream(std::istream& stream, std::string& error, bool ignore_invalid_keys)
+bool ArgsManager::ReadConfigStream(std::istream& stream, std::string& error, bool ignore_invalid_keys, bool includeconf_enabled)
 {
     LOCK(cs_args);
     std::vector<std::pair<std::string, std::string>> options;
+    std::string initial_section;
     m_config_sections.clear();
-    if (!GetConfigOptions(stream, error, options, m_config_sections)) {
+    if (!GetConfigOptions(stream, initial_section, error, options, m_config_sections, includeconf_enabled ? 0 : -1)) {
         return false;
     }
     for (const std::pair<std::string, std::string>& option : options) {
@@ -929,9 +959,6 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
 
     // ok to not have a config file
     if (stream.good()) {
-        if (!ReadConfigStream(stream, error, ignore_invalid_keys)) {
-            return false;
-        }
         // if there is an -includeconf in the override args, but it is empty, that means the user
         // passed '-noincludeconf' on the command line, in which case we should not include anything
         bool emptyIncludeConf;
@@ -939,52 +966,8 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
             LOCK(cs_args);
             emptyIncludeConf = m_override_args.count("-includeconf") == 0;
         }
-        if (emptyIncludeConf) {
-            std::string chain_id = GetChainName();
-            std::vector<std::string> includeconf(GetArgs("-includeconf"));
-            {
-                // We haven't set m_network yet (that happens in SelectParams()), so manually check
-                // for network.includeconf args.
-                std::vector<std::string> includeconf_net(GetArgs(std::string("-") + chain_id + ".includeconf"));
-                includeconf.insert(includeconf.end(), includeconf_net.begin(), includeconf_net.end());
-            }
-
-            // Remove -includeconf from configuration, so we can warn about recursion
-            // later
-            {
-                LOCK(cs_args);
-                m_config_args.erase("-includeconf");
-                m_config_args.erase(std::string("-") + chain_id + ".includeconf");
-            }
-
-            for (const std::string& to_include : includeconf) {
-                fsbridge::ifstream include_config(GetConfigFile(to_include));
-                if (include_config.good()) {
-                    if (!ReadConfigStream(include_config, error, ignore_invalid_keys)) {
-                        return false;
-                    }
-                    LogPrintf("Included configuration file %s\n", to_include.c_str());
-                } else {
-                    error = "Failed to include configuration file " + to_include;
-                    return false;
-                }
-            }
-
-            // Warn about recursive -includeconf
-            includeconf = GetArgs("-includeconf");
-            {
-                std::vector<std::string> includeconf_net(GetArgs(std::string("-") + chain_id + ".includeconf"));
-                includeconf.insert(includeconf.end(), includeconf_net.begin(), includeconf_net.end());
-                std::string chain_id_final = GetChainName();
-                if (chain_id_final != chain_id) {
-                    // Also warn about recursive includeconf for the chain that was specified in one of the includeconfs
-                    includeconf_net = GetArgs(std::string("-") + chain_id_final + ".includeconf");
-                    includeconf.insert(includeconf.end(), includeconf_net.begin(), includeconf_net.end());
-                }
-            }
-            for (const std::string& to_include : includeconf) {
-                fprintf(stderr, "warning: -includeconf cannot be used from included files; ignoring -includeconf=%s\n", to_include.c_str());
-            }
+        if (!ReadConfigStream(stream, error, ignore_invalid_keys, emptyIncludeConf)) {
+            return false;
         }
     }
 
