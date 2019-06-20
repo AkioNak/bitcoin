@@ -15,6 +15,7 @@
 #include <hash.h>
 #include <limitedmap.h>
 #include <netaddress.h>
+#include <net_permissions.h>
 #include <policy/feerate.h>
 #include <protocol.h>
 #include <random.h>
@@ -138,8 +139,9 @@ public:
         uint64_t nMaxOutboundLimit = 0;
         int64_t m_peer_connect_timeout = DEFAULT_PEER_CONNECT_TIMEOUT;
         std::vector<std::string> vSeedNodes;
-        std::vector<CSubNet> vWhitelistedRange;
-        std::vector<CService> vBinds, vWhiteBinds;
+        std::vector<CNetWhitelistPermissions> vWhitelistedRange;
+        std::vector<CNetWhitebindPermissions> vWhiteBinds;
+        std::vector<CService> vBinds;
         bool m_use_addrman_outgoing = true;
         std::vector<std::string> m_specified_outgoing;
         std::vector<std::string> m_added_nodes;
@@ -315,14 +317,14 @@ public:
 private:
     struct ListenSocket {
         SOCKET socket;
-        bool whitelisted;
+        CNetPermissionFlags permissions;
 
-        ListenSocket(SOCKET socket_, bool whitelisted_) : socket(socket_), whitelisted(whitelisted_) {}
+        ListenSocket(SOCKET socket_, CNetPermissionFlags permissions_) : socket(socket_), permissions(permissions_) {}
     };
 
-    bool BindListenPort(const CService &bindAddr, std::string& strError, bool fWhitelisted = false);
-    bool Bind(const CService &addr, unsigned int flags);
-    bool InitBinds(const std::vector<CService>& binds, const std::vector<CService>& whiteBinds);
+    bool BindListenPort(const CService& bindAddr, std::string& strError, CNetPermissionFlags permissions);
+    bool Bind(const CService& addr, unsigned int flags, CNetPermissionFlags permissions);
+    bool InitBinds(const std::vector<CService>& binds, const std::vector<CNetWhitebindPermissions>& whiteBinds);
     void ThreadOpenAddedConnections();
     void AddOneShot(const std::string& strDest);
     void ProcessOneShot();
@@ -347,7 +349,7 @@ private:
 
     bool AttemptToEvictConnection();
     CNode* ConnectNode(CAddress addrConnect, const char *pszDest, bool fCountFailure, bool manual_connection);
-    bool IsWhitelistedRange(const CNetAddr &addr);
+    CNetPermissionFlags GetWhitelistPermissionFlags(const CNetAddr &addr);
 
     void DeleteNode(CNode* pnode);
 
@@ -380,7 +382,7 @@ private:
 
     // Whitelisted ranges. Any node connecting from these is automatically
     // whitelisted (as well as those connecting to whitelisted binds).
-    std::vector<CSubNet> vWhitelistedRange;
+    std::vector<CNetWhitelistPermissions> vWhitelistedRange;
 
     unsigned int nSendBufferMaxSize{0};
     unsigned int nReceiveFloodSize{0};
@@ -448,7 +450,6 @@ void StartMapPort();
 void InterruptMapPort();
 void StopMapPort();
 unsigned short GetListenPort();
-bool BindListenPort(const CService &bindAddr, std::string& strError, bool fWhitelisted = false);
 
 struct CombinerAll
 {
@@ -555,6 +556,7 @@ public:
     mapMsgCmdSize mapSendBytesPerMsgCmd;
     uint64_t nRecvBytes;
     mapMsgCmdSize mapRecvBytesPerMsgCmd;
+    CNetPermissionFlags permissionFlags;
     bool fWhitelisted;
     double dPingTime;
     double dPingWait;
@@ -657,6 +659,10 @@ public:
      */
     std::string cleanSubVer GUARDED_BY(cs_SubVer){};
     bool m_prefer_evict{false}; // This peer is preferred for eviction.
+    CNetPermissionFlags permissionFlags{PF_NONE};
+    bool HasPermission(CNetPermissionFlags permission) const {
+        return (permissionFlags & permission) == permission;
+    }
     bool fWhitelisted{false}; // This peer can bypass DoS banning.
     bool fFeeler{false}; // If true this node is being used as a short lived feeler.
     bool fOneShot{false};

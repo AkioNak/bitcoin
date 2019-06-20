@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <netbase.h>
+#include <net_permissions.h>
 #include <test/setup_common.h>
 #include <util/strencodings.h>
 
@@ -319,6 +320,80 @@ BOOST_AUTO_TEST_CASE(netbase_parsenetwork)
     BOOST_CHECK_EQUAL(ParseNetwork("tÖr"), NET_UNROUTABLE);
     BOOST_CHECK_EQUAL(ParseNetwork("\xfe\xff"), NET_UNROUTABLE);
     BOOST_CHECK_EQUAL(ParseNetwork(""), NET_UNROUTABLE);
+}
+
+BOOST_AUTO_TEST_CASE(netpermissions_test)
+{
+    std::string error;
+    CNetWhitebindPermissions whitebindPermissions;
+    CNetWhitelistPermissions whitelistPermissions;
+
+    // Detect invalid white bind
+    BOOST_CHECK(!CNetWhitebindPermissions::TryParse("", &whitebindPermissions, &error));
+    BOOST_CHECK(error.find("Cannot resolve -whitebind address") != -1);
+    BOOST_CHECK(!CNetWhitebindPermissions::TryParse("127.0.0.1", &whitebindPermissions, &error));
+    BOOST_CHECK(error.find("Need to specify a port with -whitebind") != -1);
+    BOOST_CHECK(!CNetWhitebindPermissions::TryParse("", NULL, NULL));
+
+    // If no permission flags, assume backward compatibility
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse("1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK(error.empty());
+    BOOST_CHECK_EQUAL(whitebindPermissions.flags, PF_DEFAULT | PF_ISDEFAULT);
+
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse("1.2.3.4:32", NULL, NULL));
+
+    // Can set one permission
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse("bloom@1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK_EQUAL(whitebindPermissions.flags, PF_BLOOMFILTER);
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse("@1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK_EQUAL(whitebindPermissions.flags, PF_NONE);
+
+    // Happy path, can parse flags
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse("bloom,forcerelay@1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK_EQUAL(whitebindPermissions.flags, PF_BLOOMFILTER | PF_FORCERELAY);
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse("bloom,forcerelay,noban@1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK_EQUAL(whitebindPermissions.flags, PF_BLOOMFILTER | PF_FORCERELAY | PF_NOBAN);
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse("bloom,forcerelay,noban@1.2.3.4:32", NULL, NULL));
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse("all@1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK_EQUAL(whitebindPermissions.flags, PF_ALL);
+
+    // Allow dups
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse("bloom,forcerelay,noban,noban@1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK_EQUAL(whitebindPermissions.flags, PF_BLOOMFILTER | PF_FORCERELAY | PF_NOBAN);
+
+    // Allow empty
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse("bloom,forcerelay,,noban@1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK_EQUAL(whitebindPermissions.flags, PF_BLOOMFILTER | PF_FORCERELAY | PF_NOBAN);
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse(",@1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK_EQUAL(whitebindPermissions.flags, PF_NONE);
+    BOOST_CHECK(CNetWhitebindPermissions::TryParse(",,@1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK_EQUAL(whitebindPermissions.flags, PF_NONE);
+
+    // Detect invalid flag
+    BOOST_CHECK(!CNetWhitebindPermissions::TryParse("bloom,forcerelay,oopsie@1.2.3.4:32", &whitebindPermissions, &error));
+    BOOST_CHECK(error.find("Invalid P2P permission") != -1);
+
+    // Check whitelist error
+    BOOST_CHECK(!CNetWhitelistPermissions::TryParse("bloom,forcerelay,noban@1.2.3.4:32", &whitelistPermissions, &error));
+    BOOST_CHECK(error.find("Invalid netmask specified in -whitelist") != -1);
+    BOOST_CHECK(!CNetWhitelistPermissions::TryParse("bloom,forcerelay,noban@1.2.3.4:32", NULL, NULL));
+
+    // Happy path for whitelist parsing
+    BOOST_CHECK(CNetWhitelistPermissions::TryParse("noban@1.2.3.4", &whitelistPermissions, &error));
+    BOOST_CHECK_EQUAL(whitelistPermissions.flags, PF_NOBAN);
+    BOOST_CHECK(CNetWhitelistPermissions::TryParse("bloom,forcerelay,noban,relay@1.2.3.4/32", &whitelistPermissions, &error));
+    BOOST_CHECK_EQUAL(whitelistPermissions.flags, PF_BLOOMFILTER | PF_FORCERELAY | PF_NOBAN | PF_RELAY);
+    BOOST_CHECK(error.empty());
+    BOOST_CHECK_EQUAL(whitelistPermissions.subnet.ToString(), "1.2.3.4/32");
+    BOOST_CHECK(CNetWhitelistPermissions::TryParse("bloom,forcerelay,noban,relay,mempool@1.2.3.4/32", NULL, NULL));
+
+    const auto strings = CNetPermissions::ToStrings(PF_ALL);
+    BOOST_CHECK_EQUAL(strings.size(), 5);
+    BOOST_CHECK(std::find(strings.begin(), strings.end(), "bloomfilter") != strings.end());
+    BOOST_CHECK(std::find(strings.begin(), strings.end(), "forcerelay") != strings.end());
+    BOOST_CHECK(std::find(strings.begin(), strings.end(), "relay") != strings.end());
+    BOOST_CHECK(std::find(strings.begin(), strings.end(), "noban") != strings.end());
+    BOOST_CHECK(std::find(strings.begin(), strings.end(), "mempool") != strings.end());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
