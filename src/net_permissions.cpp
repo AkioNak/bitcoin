@@ -6,7 +6,7 @@ bool TryParsePermissionFlags(const std::string str, CNetPermissionFlags* output,
 {
     CNetPermissionFlags flags = PF_NONE;
     const auto permissionSeparator = str.find('@');
-    if (permissionSeparator == -1)
+    if (permissionSeparator == std::string::npos)
     {
         flags = static_cast<CNetPermissionFlags>(PF_DEFAULT | PF_ISDEFAULT);
     }
@@ -16,11 +16,11 @@ bool TryParsePermissionFlags(const std::string str, CNetPermissionFlags* output,
         const auto permissions = str.substr(0, permissionSeparator);
         while (offset < permissions.length())
         {
-            const int permissionSeparator = permissions.find(',', offset);
-            int len = permissionSeparator == -1 ? permissions.length() - offset : permissionSeparator - offset;
+            const auto permissionSeparator = permissions.find(',', offset);
+            int len = permissionSeparator == std::string::npos ? permissions.length() - offset : permissionSeparator - offset;
             auto permission = permissions.substr(offset, len);
             offset += len;
-            if (permissionSeparator != -1)
+            if (permissionSeparator != std::string::npos)
                 offset += 1;
             if (permission == "bloomfilter" || permission == "bloom")
             {
@@ -64,8 +64,7 @@ bool TryParsePermissionFlags(const std::string str, CNetPermissionFlags* output,
         *output = flags;
     if (readen != NULL)
     {
-        *readen = permissionSeparator;
-        (*readen)++;
+        *readen = permissionSeparator == std::string::npos ? 0 : permissionSeparator + 1;
     }
     if (error != NULL)
         *error = "";

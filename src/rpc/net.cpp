@@ -186,7 +186,7 @@ static UniValue getpeerinfo(const JSONRPCRequest& request)
         }
         obj.pushKV("whitelisted", stats.fWhitelisted);
         UniValue permissions(UniValue::VARR);
-        for (const auto permission : CNetPermissions::ToStrings(stats.permissionFlags)) {
+        for (const auto& permission : CNetPermissions::ToStrings(stats.permissionFlags)) {
             permissions.push_back(permission);
         }
         obj.pushKV("permissions", permissions);

@@ -330,9 +330,9 @@ BOOST_AUTO_TEST_CASE(netpermissions_test)
 
     // Detect invalid white bind
     BOOST_CHECK(!CNetWhitebindPermissions::TryParse("", &whitebindPermissions, &error));
-    BOOST_CHECK(error.find("Cannot resolve -whitebind address") != -1);
+    BOOST_CHECK(error.find("Cannot resolve -whitebind address") != std::string::npos);
     BOOST_CHECK(!CNetWhitebindPermissions::TryParse("127.0.0.1", &whitebindPermissions, &error));
-    BOOST_CHECK(error.find("Need to specify a port with -whitebind") != -1);
+    BOOST_CHECK(error.find("Need to specify a port with -whitebind") != std::string::npos);
     BOOST_CHECK(!CNetWhitebindPermissions::TryParse("", NULL, NULL));
 
     // If no permission flags, assume backward compatibility
@@ -371,11 +371,11 @@ BOOST_AUTO_TEST_CASE(netpermissions_test)
 
     // Detect invalid flag
     BOOST_CHECK(!CNetWhitebindPermissions::TryParse("bloom,forcerelay,oopsie@1.2.3.4:32", &whitebindPermissions, &error));
-    BOOST_CHECK(error.find("Invalid P2P permission") != -1);
+    BOOST_CHECK(error.find("Invalid P2P permission") != std::string::npos);
 
     // Check whitelist error
     BOOST_CHECK(!CNetWhitelistPermissions::TryParse("bloom,forcerelay,noban@1.2.3.4:32", &whitelistPermissions, &error));
-    BOOST_CHECK(error.find("Invalid netmask specified in -whitelist") != -1);
+    BOOST_CHECK(error.find("Invalid netmask specified in -whitelist") != std::string::npos);
     BOOST_CHECK(!CNetWhitelistPermissions::TryParse("bloom,forcerelay,noban@1.2.3.4:32", NULL, NULL));
 
     // Happy path for whitelist parsing
