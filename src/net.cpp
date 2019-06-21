@@ -813,7 +813,7 @@ bool CConnman::AttemptToEvictConnection()
         LOCK(cs_vNodes);
 
         for (const CNode* node : vNodes) {
-            if (node->fWhitelisted)
+            if (node->HasPermission(PF_NOBAN))
                 continue;
             if (!node->fInbound)
                 continue;

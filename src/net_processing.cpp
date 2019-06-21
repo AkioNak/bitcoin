@@ -408,7 +408,7 @@ static void UpdatePreferredDownload(CNode* node, CNodeState* state) EXCLUSIVE_LO
     nPreferredDownload -= state->fPreferredDownload;
 
     // Whether this node should be marked as a preferred download node.
-    state->fPreferredDownload = (!node->fInbound || node->fWhitelisted) && !node->fOneShot && !node->fClient;
+    state->fPreferredDownload = (!node->fInbound || node->HasPermission(PF_NOBAN)) && !node->fOneShot && !node->fClient;
 
     nPreferredDownload += state->fPreferredDownload;
 }
@@ -1398,7 +1398,7 @@ void static ProcessGetBlockData(CNode* pfrom, const CChainParams& chainparams, c
     const CNetMsgMaker msgMaker(pfrom->GetSendVersion());
     // disconnect node in case we have reached the outbound limit for serving historical blocks
     // never disconnect whitelisted nodes
-    if (send && connman->OutboundTargetReached(true) && ( ((pindexBestHeader != nullptr) && (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.type == MSG_FILTERED_BLOCK) && !pfrom->fWhitelisted)
+    if (send && connman->OutboundTargetReached(true) && ( ((pindexBestHeader != nullptr) && (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.type == MSG_FILTERED_BLOCK) && !pfrom->HasPermission(PF_NOBAN))
     {
         LogPrint(BCLog::NET, "historical block serving limit reached, disconnect peer=%d\n", pfrom->GetId());
 
@@ -1407,7 +1407,7 @@ void static ProcessGetBlockData(CNode* pfrom, const CChainParams& chainparams, c
         send = false;
     }
     // Avoid leaking prune-height by never sending blocks below the NODE_NETWORK_LIMITED threshold
-    if (send && !pfrom->fWhitelisted && (
+    if (send && !pfrom->HasPermission(PF_NOBAN) && (
             (((pfrom->GetLocalServices() & NODE_NETWORK_LIMITED) == NODE_NETWORK_LIMITED) && ((pfrom->GetLocalServices() & NODE_NETWORK) != NODE_NETWORK) && (::ChainActive().Tip()->nHeight - pindex->nHeight > (int)NODE_NETWORK_LIMITED_MIN_BLOCKS + 2 /* add two blocks buffer extension for possible races */) )
        )) {
         LogPrint(BCLog::NET, "Ignore block request below NODE_NETWORK_LIMITED threshold from peer=%d\n", pfrom->GetId());
@@ -2407,7 +2407,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         }
 
         LOCK(cs_main);
-        if (::ChainstateActive().IsInitialBlockDownload() && !pfrom->fWhitelisted) {
+        if (::ChainstateActive().IsInitialBlockDownload() && !pfrom->HasPermission(PF_NOBAN)) {
             LogPrint(BCLog::NET, "Ignoring getheaders from peer=%d because node is in initial block download\n", pfrom->GetId());
             return true;
         }
@@ -3217,7 +3217,7 @@ bool PeerLogicValidation::SendRejectsAndCheckIfBanned(CNode* pnode, bool enable_
 
     if (state.fShouldBan) {
         state.fShouldBan = false;
-        if (pnode->fWhitelisted)
+        if (pnode->HasPermission(PF_NOBAN))
             LogPrintf("Warning: not punishing whitelisted peer %s!\n", pnode->addr.ToString());
         else if (pnode->m_manual_connection)
             LogPrintf("Warning: not punishing manually-connected peer %s!\n", pnode->addr.ToString());
@@ -3786,7 +3786,7 @@ bool PeerLogicValidation::SendMessages(CNode* pto)
             pto->vInventoryBlockToSend.clear();
 
             // Check whether periodic sends should happen
-            bool fSendTrickle = pto->fWhitelisted;
+            bool fSendTrickle = pto->HasPermission(PF_NOBAN);
             if (pto->nNextInvSend < nNow) {
                 fSendTrickle = true;
                 if (pto->fInbound) {
@@ -3939,7 +3939,7 @@ bool PeerLogicValidation::SendMessages(CNode* pto)
                     // Note: If all our peers are inbound, then we won't
                     // disconnect our sync peer for stalling; we have bigger
                     // problems if we can't get any outbound peers.
-                    if (!pto->fWhitelisted) {
+                    if (!pto->HasPermission(PF_NOBAN)) {
                         LogPrintf("Timeout downloading headers from peer=%d, disconnecting\n", pto->GetId());
                         pto->fDisconnect = true;
                         return true;
